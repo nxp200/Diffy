@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Diff Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/diff-match-patch/20121119/diff_match_patch.js"></script>
+    <style>
+        :root {
+            --bg-color: #f5f5f5;
+            --panel-bg: #ffffff;
+            --border-color: #ddd;
+            --header-bg: #f0f0f0;
+            --add-color: #e6ffed;
+            --add-border: #b4e2b4;
+            --delete-color: #ffebe9;
+            --delete-border: #f1c0c0;
+            --info-color: #e8f4fd;
+            --info-border: #b3d7ff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #4a76a8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #375f8a;
+        }
+
+        .options {
+            display: flex;
+            gap: 15px;
+        }
+
+        .option-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .panel-container {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-color);
+            margin: 10px;
+            background-color: var(--panel-bg);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .panel-title {
+            padding: 10px;
+            background-color: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            font-weight: bold;
+        }
+
+        .panel-content {
+            flex: 1;
+            padding: 0;
+            overflow: hidden;
+            position: relative;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100%;
+            border: none;
+            resize: none;
+            padding: 10px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            box-sizing: border-box;
+        }
+
+        textarea:focus {
+            outline: none;
+        }
+
+        .diff-view {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            white-space: pre-wrap;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .diff-panel {
+            flex: 1;
+            overflow: auto;
+            border: 1px solid var(--border-color);
+            margin: 10px;
+            background-color: var(--panel-bg);
+            border-radius: 4px;
+        }
+
+        .diff-header {
+            padding: 10px;
+            background-color: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .diff-content {
+            padding: 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow: auto;
+            max-height: calc(100vh - 140px);
+        }
+
+        .diff-line {
+            display: flex;
+            width: 100%;
+        }
+
+        .diff-line-number {
+            padding: 0 8px;
+            text-align: right;
+            border-right: 1px solid var(--border-color);
+            color: #999;
+            background-color: #f8f8f8;
+            user-select: none;
+            min-width: 40px;
+        }
+
+        .diff-line-content {
+            padding: 0 8px;
+            white-space: pre;
+            flex: 1;
+        }
+
+        .diff-added {
+            background-color: var(--add-color);
+            border-color: var(--add-border);
+        }
+
+        .diff-deleted {
+            background-color: var(--delete-color);
+            border-color: var(--delete-border);
+        }
+
+        .diff-info {
+            background-color: var(--info-color);
+            border-color: var(--info-border);
+        }
+
+        .diff-chunk-header {
+            background-color: #f0f0ff;
+            color: #666;
+            font-style: italic;
+        }
+
+        .line-numbers {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 40px;
+            background-color: #f8f8f8;
+            border-right: 1px solid var(--border-color);
+            text-align: right;
+            padding: 10px 5px;
+            box-sizing: border-box;
+            color: #999;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .status-bar {
+            background-color: var(--header-bg);
+            border-top: 1px solid var(--border-color);
+            padding: 5px 10px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* Theme switcher */
+        .theme-switch {
+            margin-left: auto;
+        }
+
+        /* Dark mode */
+        body.dark-mode {
+            --bg-color: #1e1e1e;
+            --panel-bg: #252526;
+            --border-color: #444;
+            --header-bg: #333;
+            --add-color: #113522;
+            --add-border: #236a33;
+            --delete-color: #4b1818;
+            --delete-border: #832f2f;
+            --info-color: #1e3a5a;
+            --info-border: #2c5a8a;
+            color: #ddd;
+        }
+
+        body.dark-mode textarea {
+            background-color: #1e1e1e;
+            color: #ddd;
+        }
+
+        body.dark-mode .line-numbers,
+        body.dark-mode .diff-line-number {
+            background-color: #2d2d2d;
+            color: #888;
+        }
+
+        /* File upload button styling */
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            font-size: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Syntax highlighting */
+        .highlight-keyword { color: #569cd6; }
+        .highlight-string { color: #ce9178; }
+        .highlight-comment { color: #6a9955; }
+        .highlight-function { color: #dcdcaa; }
+        .highlight-number { color: #b5cea8; }
+        
+        body.dark-mode .diff-chunk-header {
+            background-color: #2d2d4d;
+            color: #aaa;
+        }
+        
+        /* Word-level diff styles */
+        .word-diff-add {
+            background-color: #144212;
+            border-radius: 2px;
+        }
+        
+        .word-diff-delete {
+            background-color: #621919;
+            border-radius: 2px;
+            text-decoration: line-through;
+        }
+        
+        /* Split view styling */
+        .split-view {
+            display: flex;
+            width: 100%;
+        }
+        
+        .split-view-left, .split-view-right {
+            width: 50%;
+            overflow: auto;
+        }
+        
+        .split-view-left {
+            border-right: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>Text Diff Visualizer</h2>
+        <div class="controls">
+            <button id="compare-btn">Compare</button>
+            <button id="clear-btn">Clear All</button>
+            <div class="file-input-wrapper">
+                <button>Load Left</button>
+                <input type="file" id="load-left" />
+            </div>
+            <div class="file-input-wrapper">
+                <button>Load Right</button>
+                <input type="file" id="load-right" />
+            </div>
+            <div class="options">
+                <div class="option-group">
+                    <input type="checkbox" id="ignore-case" />
+                    <label for="ignore-case">Ignore Case</label>
+                </div>
+                <div class="option-group">
+                    <input type="checkbox" id="ignore-whitespace" />
+                    <label for="ignore-whitespace">Ignore Whitespace</label>
+                </div>
+                <div class="option-group">
+                    <select id="view-mode">
+                        <option value="unified">Unified View</option>
+                        <option value="split">Split View</option>
+                    </select>
+                </div>
+                <div class="option-group">
+                    <select id="context-lines">
+                        <option value="3">3 Lines Context</option>
+                        <option value="5">5 Lines Context</option>
+                        <option value="10">10 Lines Context</option>
+                        <option value="0">No Context</option>
+                        <option value="-1">Show All</option>
+                    </select>
+                </div>
+            </div>
+            <div class="theme-switch">
+                <button id="theme-toggle">🌙 / ☀️</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="panel-container">
+            <div class="panel">
+                <div class="panel-title">Original Text</div>
+                <div class="panel-content">
+                    <textarea id="text-left" placeholder="Paste or type original text here..."></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="panel-container">
+            <div class="panel">
+                <div class="panel-title">Modified Text</div>
+                <div class="panel-content">
+                    <textarea id="text-right" placeholder="Paste or type modified text here..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="diff-panel" style="display: none;">
+        <div class="diff-header">
+            <span>Differences</span>
+            <div class="diff-stats">
+                <span id="diff-stats"></span>
+            </div>
+        </div>
+        <div class="diff-content" id="diff-content"></div>
+    </div>
+
+    <div class="status-bar">
+        <span id="status">Ready to compare text</span>
+    </div>
+
+    <script>
+        // DOM Elements
+        const textLeft = document.getElementById('text-left');
+        const textRight = document.getElementById('text-right');
+        const compareBtn = document.getElementById('compare-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const ignoreCaseCheckbox = document.getElementById('ignore-case');
+        const ignoreWhitespaceCheckbox = document.getElementById('ignore-whitespace');
+        const viewModeSelect = document.getElementById('view-mode');
+        const contextLinesSelect = document.getElementById('context-lines');
+        const themeToggle = document.getElementById('theme-toggle');
+        const diffPanel = document.querySelector('.diff-panel');
+        const diffContent = document.getElementById('diff-content');
+        const diffStats = document.getElementById('diff-stats');
+        const statusElement = document.getElementById('status');
+        const loadLeftBtn = document.getElementById('load-left');
+        const loadRightBtn = document.getElementById('load-right');
+        const mainContainer = document.querySelector('.main-container');
+
+        // Event Listeners
+        compareBtn.addEventListener('click', compareTexts);
+        clearBtn.addEventListener('click', clearAll);
+        themeToggle.addEventListener('click', toggleTheme);
+        loadLeftBtn.addEventListener('change', (e) => loadFile(e, textLeft));
+        loadRightBtn.addEventListener('change', (e) => loadFile(e, textRight));
+        viewModeSelect.addEventListener('change', compareTexts);
+        
+        // Check for saved theme preference
+        if (localStorage.getItem('theme') === 'dark') {
+            document.body.classList.add('dark-mode');
+        }
+
+        // Function to toggle between light and dark mode
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+        }
+
+        // Function to load text from file
+        function loadFile(event, targetTextarea) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    targetTextarea.value = e.target.result;
+                    updateStatus(`Loaded ${file.name}`);
+                };
+                reader.onerror = function() {
+                    updateStatus('Error reading file', true);
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        // Function to update status bar
+        function updateStatus(message, isError = false) {
+            statusElement.textContent = message;
+            statusElement.style.color = isError ? '#ff4444' : '#666';
+            if (document.body.classList.contains('dark-mode')) {
+                statusElement.style.color = isError ? '#ff6b6b' : '#aaa';
+            }
+        }
+
+        // Function to clear all text
+        function clearAll() {
+            textLeft.value = '';
+            textRight.value = '';
+            diffPanel.style.display = 'none';
+            mainContainer.style.display = 'flex';
+            updateStatus('All text cleared');
+        }
+
+        // Main function to compare texts
+        function compareTexts() {
+            let left = textLeft.value;
+            let right = textRight.value;
+            
+            if (!left && !right) {
+                updateStatus('Please enter text to compare', true);
+                return;
+            }
+            
+            // Apply ignore options
+            if (ignoreCaseCheckbox.checked) {
+                left = left.toLowerCase();
+                right = right.toLowerCase();
+            }
+            
+            if (ignoreWhitespaceCheckbox.checked) {
+                left = left.replace(/\s+/g, ' ').trim();
+                right = right.replace(/\s+/g, ' ').trim();
+            }
+            
+            const contextLines = parseInt(contextLinesSelect.value);
+            const viewMode = viewModeSelect.value;
+            
+            // Initialize diff algorithm
+            const dmp = new diff_match_patch();
+            const diffs = dmp.diff_main(left, right);
+            dmp.diff_cleanupSemantic(diffs);
+            
+            // Count changes
+            let additions = 0;
+            let deletions = 0;
+            
+            diffs.forEach(diff => {
+                if (diff[0] === 1) { // Addition
+                    additions += diff[1].split('\n').length - 1 || 1;
+                } else if (diff[0] === -1) { // Deletion
+                    deletions += diff[1].split('\n').length - 1 || 1;
+                }
+            });
+            
+            // Update stats
+            diffStats.textContent = `+${additions} -${deletions}`;
+            
+            // Convert diffs to line-based format for better visualization
+            const lines = [];
+            let leftLineNumber = 1;
+            let rightLineNumber = 1;
+            
+            // Convert diffs to lines for unified view
+            if (viewMode === 'unified') {
+                let currentLine = { type: 0, content: '', leftNum: null, rightNum: null };
+                
+                diffs.forEach(diff => {
+                    const diffType = diff[0]; // -1 for deletion, 0 for context, 1 for addition
+                    const diffText = diff[1];
+                    const diffLines = diffText.split('\n');
+                    
+                    for (let i = 0; i < diffLines.length; i++) {
+                        const isLastLine = i === diffLines.length - 1;
+                        
+                        if (!isLastLine || diffLines[i]) {
+                            if (i > 0) {
+                                lines.push(currentLine);
+                                currentLine = { type: diffType, content: '', leftNum: null, rightNum: null };
+                            }
+                            
+                            currentLine.type = diffType;
+                            currentLine.content += diffLines[i];
+                            
+                            if (diffType <= 0) { // Context or deletion
+                                currentLine.leftNum = leftLineNumber++;
+                            }
+                            
+                            if (diffType >= 0) { // Context or addition
+                                currentLine.rightNum = rightLineNumber++;
+                            }
+                        }
+                    }
+                });
+                
+                if (currentLine.content || currentLine.type !== 0) {
+                    lines.push(currentLine);
+                }
+            } else {
+                // Code for split view will be implemented here
+                // For now, fallback to unified view
+                // This would be similar but separate left and right content
+            }
+            
+            // Filter lines based on context
+            let filteredLines = lines;
+            if (contextLines >= 0) {
+                filteredLines = [];
+                let inChangedBlock = false;
+                let contextQueue = [];
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    
+                    if (line.type !== 0) { // Changed line
+                        if (!inChangedBlock) {
+                            // Add preceding context
+                            const startIdx = Math.max(0, i - contextLines);
+                            for (let j = startIdx; j < i; j++) {
+                                filteredLines.push(lines[j]);
+                            }
+                            inChangedBlock = true;
+                        }
+                        
+                        // Add the changed line
+                        filteredLines.push(line);
+                        contextQueue = [];
+                        
+                        // Queue following context lines
+                        let j = i + 1;
+                        while (contextQueue.length < contextLines && j < lines.length) {
+                            if (lines[j].type === 0) {
+                                contextQueue.push(lines[j]);
+                            } else {
+                                // Found another change, reset queue
+                                contextQueue = [];
+                                break;
+                            }
+                            j++;
+                        }
+                    } else if (inChangedBlock) {
+                        // In context after a change
+                        if (contextQueue.length > 0) {
+                            const nextLine = contextQueue.shift();
+                            filteredLines.push(nextLine);
+                            
+                            // Check if we're at the end of context
+                            if (contextQueue.length === 0) {
+                                // Add separator if there are more lines
+                                if (i + 1 < lines.length) {
+                                    filteredLines.push({ type: 'separator', content: '...', leftNum: null, rightNum: null });
+                                }
+                                inChangedBlock = false;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Generate HTML for diff view
+            let html = '';
+            
+            if (viewMode === 'unified') {
+                filteredLines.forEach(line => {
+                    if (line.type === 'separator') {
+                        html += `<div class="diff-line diff-chunk-header">
+                            <div class="diff-line-number">...</div>
+                            <div class="diff-line-number">...</div>
+                            <div class="diff-line-content">${line.content}</div>
+                        </div>`;
+                    } else {
+                        const lineClass = line.type === -1 ? 'diff-deleted' : (line.type === 1 ? 'diff-added' : '');
+                        const prefix = line.type === -1 ? '-' : (line.type === 1 ? '+' : ' ');
+                        
+                        html += `<div class="diff-line ${lineClass}">
+                            <div class="diff-line-number">${line.leftNum || ''}</div>
+                            <div class="diff-line-number">${line.rightNum || ''}</div>
+                            <div class="diff-line-content">${prefix} ${escapeHtml(line.content)}</div>
+                        </div>`;
+                    }
+                });
+            } else {
+                // Split view implementation would go here
+                // For now, we'll just use the unified view
+                html = '<div class="split-view">';
+                html += '<div class="split-view-left">';
+                // Left side (deletions and context)
+                html += '</div>';
+                html += '<div class="split-view-right">';
+                // Right side (additions and context)
+                html += '</div>';
+                html += '</div>';
+            }
+            
+            // Display diff
+            diffContent.innerHTML = html;
+            diffPanel.style.display = 'block';
+            mainContainer.style.display = 'none';
+            
+            updateStatus('Diff generated successfully');
+        }
+        
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        // Initialize with some sample text for demo purposes
+        textLeft.value = `function helloWorld() {
+  // This is a simple function
+  console.log("Hello World!");
+  return true;
+}
+
+// Main code
+const result = helloWorld();
+console.log("Function returned:", result);`;
+
+        textRight.value = `function helloWorld() {
+  // This is a simple function with a change
+  console.log("Hello Modified World!");
+  return true;
+}
+
+// Main code
+const result = helloWorld();
+console.log("Function result:", result);
+// Added a new comment line`;
+
+        updateStatus('Sample text loaded. Click "Compare" to see the diff.');
+    </script>
+</body>
+</html>
